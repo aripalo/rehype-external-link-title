@@ -1,0 +1,20 @@
+# gitleaks configuration: extends the bundled default rules.
+# See: https://github.com/gitleaks/gitleaks#configuration
+#
+# This file exists so we can add project-specific allowlists or custom rules
+# in one place (CI + pre-commit + manual scans all read it). The default
+# ruleset is comprehensive; we only override when there are false positives
+# we want to silence.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  '''(^|/)\.gitleaks\.toml$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+  '''(^|/)dist/''',
+  '''(^|/)coverage/''',
+  '''(^|/)node_modules/''',
+]

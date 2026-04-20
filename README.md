@@ -20,6 +20,8 @@ caching layer.
 - [Types](#types)
 - [Compatibility](#compatibility)
 - [Security](#security)
+- [Contributing](#contributing)
+- [Releasing](#releasing)
 - [License](#license)
 
 ## What is this?
@@ -249,6 +251,89 @@ The HTML returned by remote servers is sanitized internally with [DOMPurify][]
 extracted, so malicious script tags in the source page are discarded before
 parsing.
 
+## Contributing
+
+### Local setup
+
+```sh
+pnpm install
+pnpm test           # run vitest
+pnpm test:coverage  # run vitest with v8 coverage (writes ./coverage)
+pnpm typecheck      # tsc --noEmit
+pnpm build          # tsdown → ./dist
+```
+
+### Secret scanning (gitleaks pre-commit hook)
+
+This repo ships a Docker-based [gitleaks][] pre-commit hook in [`.githooks/pre-commit`](./.githooks/pre-commit). It scans the **staged diff only** (so it's fast) and blocks the commit if any secret is detected.
+
+#### Enable the hook (one-time, per clone)
+
+```sh
+git config core.hooksPath .githooks
+```
+
+> Hooks live inside the repo (under `.githooks/`) instead of `.git/hooks/` so they're versioned and shared. Each contributor must opt in once with the command above — git does not auto-trust in-repo hooks, by design.
+
+#### Requirements
+
+- [Docker][] must be available on `PATH`. The hook pulls/runs the pinned image `zricethezav/gitleaks:v8.30.1` once per commit (no local Go install needed).
+- If Docker is missing, the hook prints a warning and lets the commit through, so it doesn't break contributors who haven't installed Docker yet — but CI will still reject committed secrets (see below).
+
+#### Bypassing
+
+For an intentional false-positive bypass on a single commit:
+
+```sh
+git commit --no-verify
+```
+
+#### Manual full-repo scan
+
+```sh
+docker run --rm -v "$(pwd):/repo" -w /repo zricethezav/gitleaks:v8.30.1 git --redact --verbose
+```
+
+Project-specific allowlists (e.g. test fixtures that look like keys but aren't) live in [`.gitleaks.toml`](./.gitleaks.toml).
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every push and pull request:
+
+1. **Build & test** — `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test:coverage`, `pnpm build`.
+2. **SonarQube Cloud scan** — uploads `coverage/lcov.info` plus a static analysis pass. Requires the `SONAR_TOKEN` repository secret (generated at [SonarCloud → My Account → Security][sonarcloud-token]).
+3. **Gitleaks scan** — full-history secret scan via [gitleaks/gitleaks-action][gitleaks-action]. No license needed for personal-account repos.
+
+All actions are pinned to commit SHAs (with the human-readable tag in a comment) so the workflow is reproducible and auditable.
+
+## Releasing
+
+Releases are published to npm by [`.github/workflows/publish.yml`](./.github/workflows/publish.yml) on every published GitHub Release, using **npm trusted publishing (OIDC)** — no `NPM_TOKEN` secret is involved.
+
+### One-time setup on npmjs.com
+
+1. Publish version `0.1.0` manually once (so the package exists). Then on subsequent releases the trusted publisher takes over.
+2. Visit `https://www.npmjs.com/package/rehype-external-link-title/access` → **Trusted Publisher** → add a new GitHub Actions publisher with:
+   - Organization or user: `aripalo`
+   - Repository: `rehype-external-link-title`
+   - Workflow filename: `publish.yml`
+   - Environment: _(leave blank, or set if you want manual approval gating)_
+3. Delete any pre-existing `NPM_TOKEN` repository secret — it's no longer needed and is now an unused attack surface.
+
+### Cutting a release
+
+1. Bump the `version` field in `package.json` and commit.
+2. Tag and push: `git tag v0.2.0 && git push --tags`
+3. Create a GitHub Release for that tag (via the GitHub UI or `gh release create v0.2.0`).
+4. The workflow runs typecheck + tests + build, then `npm publish --provenance --access public`. The OIDC token is exchanged with npm for short-lived publish credentials, and a [provenance attestation][provenance] is attached to the published version.
+
+### Anatomy of `package.json` lifecycle scripts
+
+| Script | When it runs | Purpose |
+|---|---|---|
+| `prepack`            | `npm pack`, `npm publish`, git installs | Builds `dist/` so the tarball is always complete |
+| `prepublishOnly`     | `npm publish` only | Runs `pnpm typecheck && pnpm test` as a publish gate |
+
 ## License
 
 [MIT][license] © [Ari Palo][author]
@@ -261,5 +346,10 @@ parsing.
 [esm]: https://gist.github.com/sindresorhus/a39789f98801d908bbc7ff3ecc99d99c
 [typescript]: https://www.typescriptlang.org
 [dompurify]: https://github.com/cure53/DOMPurify
+[gitleaks]: https://gitleaks.io/
+[gitleaks-action]: https://github.com/gitleaks/gitleaks-action
+[docker]: https://www.docker.com/
+[sonarcloud-token]: https://sonarcloud.io/account/security
+[provenance]: https://docs.npmjs.com/generating-provenance-statements
 [license]: ./LICENSE
 [author]: https://aripalo.technology
