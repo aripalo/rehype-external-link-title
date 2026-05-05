@@ -1,9 +1,14 @@
 # rehype-external-link-title
 
-[**rehype**][rehype] plugin that fetches the page `<title>` of every external
+[**rehype**][Rehype] plugin that fetches the page `<title>` of every external
 link in your HTML and writes it to the link's `title` attribute (so users see
 the destination's real name when they hover the link), with a pluggable
 caching layer.
+
+>[!TIP]
+> Demo:
+>
+> ![demo](/demo.gif)
 
 ## Contents
 
